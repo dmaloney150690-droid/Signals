@@ -118,16 +118,21 @@ with st.sidebar:
     st.header("Risk & Account")
     equity = st.number_input("Equity (£)", min_value=100.0, value=float(cfg["equity_gbp"]), step=50.0, format="%.2f")
     risk_pct = st.slider("Risk per trade (%)", 0.25, 3.0, float(cfg["risk_per_trade_pct"]), 0.25)
-    max_lev = st.select_slider("Max leverage (cap)", options=[1,2,3], value=int(cfg["max_leverage"]))
-    max_pos = st.select_slider("Max open positions", options=[1,2,3,4,5], value=int(cfg["max_open_positions"]))
+    max_lev = st.select_slider("Max leverage (cap)", options=[1, 2, 3], value=int(cfg["max_leverage"]))
+    max_pos = st.select_slider("Max open positions", options=[1, 2, 3, 4, 5], value=int(cfg["max_open_positions"]))
     dls = st.slider("Daily loss stop (%) (info only)", 2.0, 10.0, float(cfg["daily_loss_stop_pct"]), 0.5)
 
     st.header("Universe")
-    uni = st.selectbox("Choose universe", [
-        "All (US+UK+EU)", "US (S&P500)", "US (Nasdaq-100)",
-        "UK (FTSE350)", "EU (DAX40 + CAC40)", "Forex (Majors)",
-        "Custom (enter tickers)", "Custom (upload CSV)"
-    ], index=0)
+    uni = st.selectbox(
+        "Choose universe",
+        [
+            "All (US+UK+EU)", "US (S&P500)", "US (Nasdaq-100)",
+            "UK (FTSE350)", "EU (DAX40 + CAC40)", "Forex (Majors)",
+            "Custom (enter tickers)", "Custom (upload CSV)"
+        ],
+        index=0,
+    )
+
     uploaded_tickers = []
     if uni == "Custom (upload CSV)":
         up = st.file_uploader("Upload CSV with 'ticker' column", type=["csv"])
@@ -137,6 +142,7 @@ with st.sidebar:
             uploaded_tickers = dfu[col].dropna().astype(str).str.upper().tolist()
             st.caption(f"Loaded {len(uploaded_tickers)} tickers.")
     custom_tickers = st.text_area("Custom tickers (AAPL, AZN.L, EURUSD=X)").strip()
+
     timeframe_days = st.slider("History window (days)", 150, 1000, int(cfg["timeframe_days"]), 25)
 
     st.header("Filters & Realism")
@@ -145,22 +151,19 @@ with st.sidebar:
     px_max  = st.number_input("Max price", 5.0, 1500.0, float(cfg["price_max"]))
     assumed_spread_bps = st.number_input("Assumed spread+slip (bps)", 0, 100, int(cfg["assumed_spread_bps"]))
     min_stop_to_spread = st.number_input("Min stop ÷ spread (×)", 1, 50, int(cfg["min_stop_to_spread"]))
-    allow_shorts = st.checkbox("Allow SHORT setups", value=bool(cfg["allow_shorts"]))
+    allow_shorts = st.checkbox("Allow SHORT setups", value=bool(cfg["allow_shorts"]), key="allow_shorts")
 
     st.header("Signal Sensitivity")
-    ema_proximity = st.slider("Pullback: distance to EMA20 (%)", 0.3, 2.5, 1.2, 0.1)
-    atr_stop_mult = st.slider("ATR stop multiple", 1.0, 3.0, 1.7, 0.1)   # looser than 2.0
-    breakout_tol  = st.slider("Breakout tolerance (% below 20H)", 0.0, 0.3, 0.1, 0.05)  # allows 'touch' breakouts
+    ema_proximity = st.slider("Pullback: distance to EMA20 (%)", 0.3, 2.5, 1.2, 0.1, key="ema_prox")
+    atr_stop_mult = st.slider("ATR stop multiple", 1.0, 3.0, 1.7, 0.1, key="atr_mult")
+    breakout_tol  = st.slider("Breakout tolerance (% below 20H)", 0.0, 0.3, 0.1, 0.05, key="breakout_tol")
 
     st.header("Run Controls")
-    max_symbols = st.slider("Max symbols to scan", 50, 800, int(cfg["max_scan_symbols"]), 50)
-    max_seconds = st.slider("Time cap (seconds)", 20, 90, int(cfg["max_scan_seconds"]), 5)
-confidence_floor = st.slider(
-    "Min Confidence", 0.0, 1.0, float(cfg["confidence_floor"]), 0.05,
-    key="sidebar_min_conf"
-)
+    max_symbols = st.slider("Max symbols to scan", 50, 800, int(cfg["max_scan_symbols"]), 50, key="max_symbols")
+    max_seconds = st.slider("Time cap (seconds)", 20, 90, int(cfg["max_scan_seconds"]), 5, key="max_seconds")
+    confidence_floor = st.slider("Min Confidence", 0.0, 1.0, float(cfg["confidence_floor"]), 0.05, key="sidebar_min_conf")
+    use_news = st.checkbox("Include news scoring (slower)", value=False, key="use_news")
 
-    use_news = st.checkbox("Include news scoring (slower)", value=False)
 
 # ----------------------------- FX & Liquidity helpers -----------------------------
 CCY_MAP = {".L":"GBP",".DE":"EUR",".PA":"EUR",".AS":"EUR",".MI":"EUR",".BR":"EUR",".MC":"EUR",".SW":"CHF",".HK":"HKD",".TO":"CAD",".NE":"CAD"}
