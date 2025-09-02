@@ -1,6 +1,8 @@
-streamlit
-pandas
-numpy
-yfinance
-matplotlib
-vaderSentiment
+streamlit>=1.36
+yfinance>=0.2.40
+pandas>=2.2
+numpy>=1.26
+matplotlib>=3.8
+vaderSentiment>=3.3.2
+requests>=2.31
+feedparser
