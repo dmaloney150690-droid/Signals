@@ -157,9 +157,10 @@ with st.sidebar:
     max_symbols = st.slider("Max symbols to scan", 50, 800, int(cfg["max_scan_symbols"]), 50, key="max_symbols")
     max_seconds = st.slider("Time cap (seconds)", 20, 90, int(cfg["max_scan_seconds"]), 5, key="max_seconds")
 
-    # Single source of truth for confidence (used everywhere)
-    st.session_state["min_conf"] = st.slider("Min Confidence", 0.0, 1.0, float(cfg["confidence_floor"]), 0.05, key="min_conf")
+    # Confidence + News (keep both in the sidebar)
+    st.slider("Min Confidence", 0.0, 1.0, float(cfg["confidence_floor"]), 0.05, key="min_conf")
     use_news = st.checkbox("Include news scoring (slower)", value=False, key="use_news")
+
 
 # ----------------------------- FX & Liquidity helpers -----------------------------
 CCY_MAP = {".L":"GBP",".DE":"EUR",".PA":"EUR",".AS":"EUR",".MI":"EUR",".BR":"EUR",".MC":"EUR",".SW":"CHF",".HK":"HKD",".TO":"CAD",".NE":"CAD"}
