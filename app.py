@@ -1,8 +1,9 @@
-# app.py — Signals Pro (v9 – wider universe, looser prerequisites, faster UX)
+# app.py — Signals Pro (v10 — stable universes, single confidence slider, better FX)
 # One-page workflow: Setup ➜ Universe ➜ Scan ➜ Review ➜ Orders
-# No OpenAI dependency. Uses yfinance + lightweight NLP for news scoring (optional).
+# Uses yfinance + lightweight NLP for news scoring (optional)
 
 import os, re, requests, feedparser, datetime as dt, math, time
+from pathlib import Path
 from functools import lru_cache
 from typing import List, Dict, Any, Optional
 
@@ -14,9 +15,9 @@ import matplotlib.pyplot as plt
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 
 # ----------------------------- Page -----------------------------
-st.set_page_config(page_title="Signals Pro — 1–3 Day Holds (v9)", layout="wide")
-st.title("Signals Pro — 1–3 Day Holds (v9)")
-st.caption("Wider universes • Softer entry rules • FX-aware sizing • Risk-first • Fast, lazy loads")
+st.set_page_config(page_title="Signals Pro — 1–3 Day Holds (v10)", layout="wide")
+st.title("Signals Pro — 1–3 Day Holds (v10)")
+st.caption("Stable universes • Single confidence slider • FX pivots • Risk-first • Cached loads")
 st.divider()
 
 # ----------------------------- Defaults -----------------------------
@@ -41,73 +42,70 @@ cfg = {
 }
 
 # ----------------------------- Session -----------------------------
-for k, v in [("last_signals", pd.DataFrame()), ("journal", []), ("macro_dates", []), ("market_snap", None)]:
-    if k not in st.session_state: st.session_state[k] = v
+for k, v in [("last_signals", pd.DataFrame()), ("journal", []),
+             ("macro_dates", []), ("market_snap", None)]:
+    if k not in st.session_state:
+        st.session_state[k] = v
 
 UA = {"User-Agent": "SignalsPro/1.0"}
 analyzer = SentimentIntensityAnalyzer()
 
-# ----------------------------- Universes -----------------------------
+# ----------------------------- Universes (fallbacks) -----------------------------
 SP100 = [
-"AAPL","ABBV","ABT","ACN","ADBE","AMD","AMGN","AMT","AMZN","AVGO","AXP","BA","BAC","BK","BKNG","BLK","BMY","CAT",
-"CMCSA","COF","COP","COST","CRM","CSCO","CVS","CVX","DE","DHR","DIS","DUK","EMR","EXC","F","FDX","GE","GILD","GM",
-"GOOG","GOOGL","GS","HD","HON","IBM","INTC","JNJ","JPM","KO","LIN","LLY","LMT","LOW","MA","MCD","MDLZ","MDT","META",
-"MMM","MO","MS","MSFT","NEE","NFLX","NKE","NOW","NVDA","ORCL","PEP","PFE","PM","PYPL","QCOM","RTX","SBUX","SCHW","SO",
-"SPGI","T","TGT","TMO","TMUS","TSLA","TXN","UNH","UNP","UPS","USB","V","VZ","WBA","WFC","WMT","XOM"
+    "AAPL","ABBV","ABT","ACN","ADBE","AMD","AMGN","AMT","AMZN","AVGO","AXP","BA","BAC","BK","BKNG","BLK","BMY","CAT",
+    "CMCSA","COF","COP","COST","CRM","CSCO","CVS","CVX","DE","DHR","DIS","DUK","EMR","EXC","F","FDX","GE","GILD","GM",
+    "GOOG","GOOGL","GS","HD","HON","IBM","INTC","JNJ","JPM","KO","LIN","LLY","LMT","LOW","MA","MCD","MDLZ","MDT","META",
+    "MMM","MO","MS","MSFT","NEE","NFLX","NKE","NOW","NVDA","ORCL","PEP","PFE","PM","PYPL","QCOM","RTX","SBUX","SCHW","SO",
+    "SPGI","T","TGT","TMO","TMUS","TSLA","TXN","UNH","UNP","UPS","USB","V","VZ","WBA","WFC","WMT","XOM"
 ]
-FTSE100 = ["AZN.L","SHEL.L","HSBA.L","ULVR.L","BP.L","RIO.L","GSK.L","DGE.L","BATS.L","BDEV.L","BARC.L","VOD.L","TSCO.L","LLOY.L","RS1.L","IAG.L","WTB.L","CRH.L","REL.L","PRU.L","NG.L","AAL.L","SBRY.L","AUTO.L","SGE.L","JD.L","NXT.L","HLMA.L","SVT.L","SMT.L","BRBY.L","FERG.L","HL.L","KGF.L","IMB.L","III.L","RR.L","RTO.L","EXPN.L","BKG.L","BA.L","CNA.L","AV.L","ITV.L","PHNX.L","PSN.L","SSE.L","STAN.L"]
-DAX40 = ["ADS.DE","ALV.DE","BAS.DE","BAYN.DE","BMW.DE","CON.DE","DBK.DE","DTE.DE","DPW.DE","FRE.DE","HEN3.DE","IFX.DE","LIN.DE","MRK.DE","MUV2.DE","PUM.DE","RWE.DE","SAP.DE","SIE.DE","VOW3.DE","VNA.DE","ZAL.DE","DHER.DE","BEI.DE","MTX.DE","HNR1.DE","SY1.DE","1COV.DE","AIR.DE","ENR.DE","HFG.DE","PAH3.DE","HLE.DE","DWNI.DE"]
-CAC40 = ["AI.PA","AIR.PA","ALO.PA","BN.PA","BNP.PA","CAP.PA","CA.PA","CS.PA","DG.PA","EL.PA","ENGI.PA","GLE.PA","HO.PA","KER.PA","LR.PA","MC.PA","OR.PA","PUB.PA","RI.PA","SAF.PA","SAN.PA","SGO.PA","STLA.PA","SU.PA","SW.PA","TTE.PA","URW.AS","VIE.PA","VIV.PA","WLN.PA"]
-FOREX_MAJORS = ["EURUSD=X","GBPUSD=X","USDJPY=X","AUDUSD=X","USDCAD=X","USDCHF=X","NZDUSD=X","EURGBPÂ=X".replace("Â","")]
+FTSE100 = [
+    "AZN.L","SHEL.L","HSBA.L","ULVR.L","BP.L","RIO.L","GSK.L","DGE.L","BATS.L","BDEV.L","BARC.L","VOD.L","TSCO.L","LLOY.L",
+    "RS1.L","IAG.L","WTB.L","CRH.L","REL.L","PRU.L","NG.L","AAL.L","SBRY.L","AUTO.L","SGE.L","JD.L","NXT.L","HLMA.L","SVT.L",
+    "SMT.L","BRBY.L","FERG.L","HL.L","KGF.L","IMB.L","III.L","RR.L","RTO.L","EXPN.L","BKG.L","BA.L","CNA.L","AV.L","ITV.L",
+    "PHNX.L","PSN.L","SSE.L","STAN.L"
+]
+DAX40 = ["ADS.DE","ALV.DE","BAS.DE","BAYN.DE","BMW.DE","CON.DE","DBK.DE","DTE.DE","DPW.DE","FRE.DE",
+         "HEN3.DE","IFX.DE","LIN.DE","MRK.DE","MUV2.DE","PUM.DE","RWE.DE","SAP.DE","SIE.DE","VOW3.DE",
+         "VNA.DE","ZAL.DE","DHER.DE","BEI.DE","MTX.DE","HNR1.DE","SY1.DE","1COV.DE","AIR.DE","ENR.DE",
+         "HFG.DE","PAH3.DE","HLE.DE","DWNI.DE"]
+CAC40 = ["AI.PA","AIR.PA","ALO.PA","BN.PA","BNP.PA","CAP.PA","CA.PA","CS.PA","DG.PA","EL.PA","ENGI.PA",
+         "GLE.PA","HO.PA","KER.PA","LR.PA","MC.PA","OR.PA","PUB.PA","RI.PA","SAF.PA","SAN.PA","SGO.PA",
+         "STLA.PA","SU.PA","SW.PA","TTE.PA","URW.AS","VIE.PA","VIV.PA","WLN.PA"]
+FOREX_MAJORS = ["EURUSD=X","GBPUSD=X","USDJPY=X","AUDUSD=X","USDCAD=X","USDCHF=X","NZDUSD=X","EURGBP=X"]
 
-@lru_cache(maxsize=1)
-def load_sp500_symbols():
-    try:
-        tables = pd.read_html("https://en.wikipedia.org/wiki/List_of_S%26P_500_companies")
-        df = tables[0]
-        syms = df["Symbol"].astype(str).str.replace(".", "-", regex=False).str.upper().tolist()
-        return sorted(list(set(syms)))
-    except Exception:
-        return SP100
+# Robust local universes (no scraping)
+DATA_DIR = Path(__file__).parent / "data"
 
-@lru_cache(maxsize=1)
-def load_nasdaq100_symbols():
-    try:
-        tables = pd.read_html("https://en.wikipedia.org/wiki/Nasdaq-100")
-        cand = None
-        for t in tables:
-            cols = [c.lower() for c in t.columns.astype(str)]
-            if any("ticker" in c or "symbol" in c for c in cols):
-                cand = t; break
-        if cand is None: return []
-        col = [c for c in cand.columns if "ticker" in str(c).lower() or "symbol" in str(c).lower()][0]
-        return sorted(list(set(cand[col].dropna().astype(str).str.upper().tolist())))
-    except Exception:
-        return []
+def _load_universe_csv(name: str, fallback_list: list[str]) -> list[str]:
+    p = DATA_DIR / f"{name}.csv"
+    if p.exists():
+        df = pd.read_csv(p)
+        col = next((c for c in df.columns if str(c).lower() in ("ticker","symbol")), None)
+        if col:
+            return (
+                df[col].dropna().astype(str).str.strip().str.upper().tolist()
+            )
+    return fallback_list
 
-@lru_cache(maxsize=1)
-def load_ftse350_symbols():
-    try:
-        tables = pd.read_html("https://en.wikipedia.org/wiki/FTSE_350_Index")
-        cand = None
-        for t in tables:
-            if any(str(c).upper() in ("EPIC","TIDM","TICKER") for c in t.columns):
-                cand = t; break
-        if cand is None: return FTSE100
-        col = next(c for c in cand.columns if str(c).upper() in ("EPIC","TIDM","TICKER"))
-        syms = cand[col].dropna().astype(str).str.upper()
-        return sorted(list(set((syms + ".L").tolist())))
-    except Exception:
-        return FTSE100
+SP500 = _load_universe_csv("sp500", SP100)
+NASDAQ100 = _load_universe_csv("nasdaq100", SP100)
+FTSE350 = _load_universe_csv("ftse350", FTSE100)
 
 def pick_universe(uni: str, custom: str, uploaded: Optional[List[str]]):
-    if uni == "All (US+UK+EU)":  return sorted(list(set(load_sp500_symbols() + load_nasdaq100_symbols() + load_ftse350_symbols() + DAX40 + CAC40)))
-    if uni == "US (S&P500)":     return load_sp500_symbols()
-    if uni == "US (Nasdaq-100)": return load_nasdaq100_symbols() or SP100
-    if uni == "UK (FTSE350)":    return load_ftse350_symbols()
-    if uni == "EU (DAX40 + CAC40)": return sorted(list(set(DAX40 + CAC40)))
-    if uni == "Forex (Majors)":  return FOREX_MAJORS
-    if uni == "Custom (upload CSV)": return uploaded or []
+    if uni == "All (US+UK+EU)":
+        return sorted(list(set(SP500 + NASDAQ100 + FTSE350 + DAX40 + CAC40)))
+    if uni == "US (S&P500)":
+        return SP500
+    if uni == "US (Nasdaq-100)":
+        return NASDAQ100 or SP100
+    if uni == "UK (FTSE350)":
+        return FTSE350
+    if uni == "EU (DAX40 + CAC40)":
+        return sorted(list(set(DAX40 + CAC40)))
+    if uni == "Forex (Majors)":
+        return FOREX_MAJORS
+    if uni == "Custom (upload CSV)":
+        return uploaded or []
     if uni == "Custom (enter tickers)":
         toks = [t.strip().upper() for t in (custom or "").split(",") if t.strip()]
         return toks
@@ -117,7 +115,7 @@ def pick_universe(uni: str, custom: str, uploaded: Optional[List[str]]):
 with st.sidebar:
     st.header("Risk & Account")
     equity = st.number_input("Equity (£)", min_value=100.0, value=float(cfg["equity_gbp"]), step=50.0, format="%.2f")
-    risk_pct = st.slider("Risk per trade (%)", 0.25, 3.0, float(cfg["risk_per_trade_pct"]), 0.25)
+    risk_pct = st.slider("Risk per trade (%)", 0.25, 3.0, float(cfg["risk_per_trade_pct"]), 0.25, key="risk_pct")
     max_lev = st.select_slider("Max leverage (cap)", options=[1, 2, 3], value=int(cfg["max_leverage"]))
     max_pos = st.select_slider("Max open positions", options=[1, 2, 3, 4, 5], value=int(cfg["max_open_positions"]))
     dls = st.slider("Daily loss stop (%) (info only)", 2.0, 10.0, float(cfg["daily_loss_stop_pct"]), 0.5)
@@ -125,11 +123,8 @@ with st.sidebar:
     st.header("Universe")
     uni = st.selectbox(
         "Choose universe",
-        [
-            "All (US+UK+EU)", "US (S&P500)", "US (Nasdaq-100)",
-            "UK (FTSE350)", "EU (DAX40 + CAC40)", "Forex (Majors)",
-            "Custom (enter tickers)", "Custom (upload CSV)"
-        ],
+        ["All (US+UK+EU)", "US (S&P500)", "US (Nasdaq-100)", "UK (FTSE350)",
+         "EU (DAX40 + CAC40)", "Forex (Majors)", "Custom (enter tickers)", "Custom (upload CSV)"],
         index=0,
     )
 
@@ -161,44 +156,61 @@ with st.sidebar:
     st.header("Run Controls")
     max_symbols = st.slider("Max symbols to scan", 50, 800, int(cfg["max_scan_symbols"]), 50, key="max_symbols")
     max_seconds = st.slider("Time cap (seconds)", 20, 90, int(cfg["max_scan_seconds"]), 5, key="max_seconds")
-    confidence_floor = st.slider("Min Confidence", 0.0, 1.0, float(cfg["confidence_floor"]), 0.05, key="sidebar_min_conf")
-    use_news = st.checkbox("Include news scoring (slower)", value=False, key="use_news")
 
+    # Single source of truth for confidence
+    st.session_state["min_conf"] = st.slider("Min Confidence", 0.0, 1.0, float(cfg["confidence_floor"]), 0.05, key="min_conf")
+    use_news = st.checkbox("Include news scoring (slower)", value=False, key="use_news")
 
 # ----------------------------- FX & Liquidity helpers -----------------------------
 CCY_MAP = {".L":"GBP",".DE":"EUR",".PA":"EUR",".AS":"EUR",".MI":"EUR",".BR":"EUR",".MC":"EUR",".SW":"CHF",".HK":"HKD",".TO":"CAD",".NE":"CAD"}
 def is_fx(symbol: str) -> bool: return symbol.endswith("=X")
 
-@lru_cache(maxsize=4096)
+@st.cache_data(ttl=900, show_spinner=False)
+def fetch_hist(sym: str, days: int) -> pd.DataFrame:
+    return yf.download(sym, period=f"{days}d", progress=False, auto_adjust=True)
+
+@st.cache_data(ttl=900, show_spinner=False)
+def _last_close(pair: str) -> Optional[float]:
+    try:
+        df = yf.download(pair, period="30d", interval="1d", progress=False, auto_adjust=True)
+        s = pd.to_numeric(df.get("Close", pd.Series([], dtype=float)), errors="coerce").dropna()
+        return float(s.iloc[-1]) if not s.empty else None
+    except Exception:
+        return None
+
 def get_listing_currency(ticker: str) -> str:
     try:
         info = yf.Ticker(ticker).info or {}
         c = info.get("currency")
         if c: return str(c).upper()
-    except Exception: pass
+    except Exception:
+        pass
     for suf, ccy in CCY_MAP.items():
         if ticker.endswith(suf): return ccy
     return "USD"
 
-@lru_cache(maxsize=1024)
-def _last_close(pair: str) -> Optional[float]:
-    try:
-        df = yf.download(pair, period="30d", interval="1d", progress=False, auto_adjust=True)
-        if df is None or df.empty: return None
-        return float(pd.to_numeric(df["Close"], errors="coerce").dropna().iloc[-1])
-    except Exception: return None
-
-@lru_cache(maxsize=1024)
 def fx_rate(ccy_from: str, ccy_to: str) -> float:
     ccy_from, ccy_to = (ccy_from or "USD").upper(), (ccy_to or "GBP").upper()
     if ccy_from == ccy_to: return 1.0
-    d = _last_close(f"{ccy_from}{ccy_to}=X")
-    if d and d>0: return float(d)
-    inv = _last_close(f"{ccy_to}{ccy_from}=X")
-    if inv and inv>0: return float(1.0/inv)
-    return 1.0
 
-@lru_cache(maxsize=4096)
+    # direct
+    d = _last_close(f"{ccy_from}{ccy_to}=X")
+    if d and d > 0: return float(d)
+    # inverse
+    inv = _last_close(f"{ccy_to}{ccy_from}=X")
+    if inv and inv > 0: return float(1.0 / inv)
+    # USD pivot
+    a = _last_close(f"{ccy_from}USD=X")
+    b = _last_close(f"{ccy_to}USD=X")
+    if a and b and a > 0 and b > 0: return float(a / b)
+    # EUR pivot
+    a = _last_close(f"{ccy_from}EUR=X")
+    b = _last_close(f"{ccy_to}EUR=X")
+    if a and b and a > 0 and b > 0: return float(a / b)
+
+    return 1.0  # last resort
+
+@st.cache_data(ttl=900, show_spinner=False)
 def last_close_and_adv_usd(ticker: str):
     try:
         df = yf.download(ticker, period="45d", interval="1d", progress=False, auto_adjust=False)
@@ -261,7 +273,6 @@ def ema(series, period): return series.ewm(span=period, adjust=False).mean()
 def sma(series, period): return series.rolling(period).mean()
 
 def scan_signals(df: pd.DataFrame, allow_shorts: bool, ema_pct=1.2, atr_mult=1.7, breakout_pct=0.1):
-    """Looser rules by default: small tolerance on breakouts and pullbacks; ATR stops a bit tighter."""
     out = []
     if df is None or df.empty or len(df) < 200: return out
     df = df.copy()
@@ -273,7 +284,8 @@ def scan_signals(df: pd.DataFrame, allow_shorts: bool, ema_pct=1.2, atr_mult=1.7
     df["RSI14"] = rsi(df["Close"], 14)
     df["ATR14"] = atr(df, 14)
     last = df.iloc[-1]; date = df.index[-1]
-    # Momentum Breakout (tolerates up to 'breakout_pct' % below exact 20H)
+
+    # Momentum Breakout (tolerance below 20H)
     tol = (1.0 - breakout_pct/100.0)
     if last["Close"] >= float(last["20H"]) * tol and pd.notna(last["ATR14"]) and last["ATR14"]>0:
         entry = float(last["Close"])
@@ -281,7 +293,8 @@ def scan_signals(df: pd.DataFrame, allow_shorts: bool, ema_pct=1.2, atr_mult=1.7
         take  = float(entry + 2.0 * (entry - stop))
         if stop < entry:
             out.append({"strategy":"Breakout Long","date":date,"entry":entry,"stop":stop,"take_profit":take,"r_multiple":2.0,"is_short":False})
-    # Pullback in Uptrend (softer: near EMA20 within ema_pct%)
+
+    # Pullback in Uptrend (near EMA20)
     if (last["SMA50"] > last["SMA200"]) and (abs(last["Close"] - last["EMA20"]) / max(1e-9, last["Close"]) <= ema_pct/100.0) and pd.notna(last["ATR14"]) and last["ATR14"]>0:
         entry = float(last["Close"])
         stop  = float(min(last["Low"], entry - atr_mult * float(last["ATR14"])))
@@ -289,14 +302,16 @@ def scan_signals(df: pd.DataFrame, allow_shorts: bool, ema_pct=1.2, atr_mult=1.7
         if risk > 0:
             take  = float(entry + 2.0 * risk)
             out.append({"strategy":"Pullback Long","date":date,"entry":entry,"stop":stop,"take_profit":take,"r_multiple":2.0,"is_short":False})
-    # RSI bounce above 200SMA (oversold 35 threshold, looser than 30)
-    if (last["Close"] > last["SMA200"]) and (rsi(df["Close"],14).iloc[-1] < 35) and pd.notna(last["ATR14"]) and last["ATR14"]>0:
+
+    # RSI bounce above 200SMA
+    if (last["Close"] > last["SMA200"]) and (df["RSI14"].iloc[-1] < 35) and pd.notna(last["ATR14"]) and last["ATR14"]>0:
         entry = float(last["Close"])
         stop  = float(min(last["Low"], entry - atr_mult * float(last["ATR14"])))
         risk  = max(entry - stop, 1e-6)
-        take  = float(entry + 1.8 * risk)   # slightly >1.5R
+        take  = float(entry + 1.8 * risk)
         out.append({"strategy":"MeanRev Long","date":date,"entry":entry,"stop":stop,"take_profit":take,"r_multiple":1.8,"is_short":False})
-    # (Optionally) shorts
+
+    # Optional shorts
     if allow_shorts:
         if last["Close"] <= last["20L"] / tol and pd.notna(last["ATR14"]) and last["ATR14"]>0:
             entry = float(last["Close"]); stop = float(entry + atr_mult * float(last["ATR14"]))
@@ -348,13 +363,16 @@ def news_yahoo(symbol: str, lookback_hours: int = 72) -> List[Dict[str, Any]]:
         t = yf.Ticker(symbol); items = getattr(t, "news", []) or []; out = []
         cut_ts = _ts_now_utc() - dt.timedelta(hours=lookback_hours)
         for a in items[:30]:
-            ts = dt.datetime.utcfromtimestamp(float(a.get("providerPublishTime", 0) or 0))
+            ts_epoch = float(a.get("providerPublishTime", 0) or 0)
+            if ts_epoch <= 0: continue
+            ts = dt.datetime.utcfromtimestamp(ts_epoch)
             if ts < cut_ts: continue
             out.append({"source": a.get("publisher",""), "title": a.get("title",""),
                         "summary": a.get("summary",""), "url": a.get("link",""),
                         "published": _to_iso_z(ts)})
         return out
-    except Exception: return []
+    except Exception:
+        return []
 
 def aggregate_news(articles: List[Dict[str, Any]]) -> Dict[str, Any]:
     if not articles:
@@ -374,8 +392,8 @@ def aggregate_news(articles: List[Dict[str, Any]]) -> Dict[str, Any]:
 def fuse(signal: Dict[str, Any], news: Dict[str, Any]) -> Dict[str, Any]:
     score = float(news.get("score",0.0)); cnt = int(news.get("count",0)); rr = float(news.get("rumour_ratio",0.0))
     is_short = bool(signal.get("IsShort", False))
-    base = 0.6
-    aligned = max(0.0, -score if is_short else score) * 0.3
+    base = 0.60
+    aligned = max(0.0, -score if is_short else score) * 0.30
     opposed = max(0.0,  score if is_short else -score) * 0.35
     conf = max(0.0, min(1.0, base + aligned - opposed - 0.15*rr + min(cnt,8)*0.01))
     return {"Confidence": round(conf,3), "NewsScore": round(score,3), "NewsCount": cnt, "RumourRatio": round(rr,3)}
@@ -383,28 +401,30 @@ def fuse(signal: Dict[str, Any], news: Dict[str, Any]) -> Dict[str, Any]:
 # ----------------------------- Lazy Regime Snapshot -----------------------------
 def pct_above_sma50(tickers, days=200):
     ok = tot = 0
-    for t in tickers[:30]:  # light
+    for t in tickers[:30]:
         try:
-            df = yf.download(t, period=f"{days}d", progress=False, auto_adjust=True)
+            df = fetch_hist(t, days)
             if df is None or df.empty: continue
             sma50 = df["Close"].rolling(50).mean().iloc[-1]
             if not np.isnan(sma50):
                 tot += 1
                 if df["Close"].iloc[-1] > sma50: ok += 1
-        except Exception: continue
+        except Exception:
+            continue
     return (ok / tot * 100.0) if tot>0 else np.nan
 
 def vix_trend(days=200):
     try:
-        v = yf.download("^VIX", period=f"{days}d", progress=False, auto_adjust=True)
+        v = fetch_hist("^VIX", days)
         if v is None or v.empty: return np.nan, np.nan, False
         sma50 = v["Close"].rolling(50).mean().iloc[-1]
         close = v["Close"].iloc[-1]
         return float(close), float(sma50), (close > sma50)
-    except Exception: return np.nan, np.nan, False
+    except Exception:
+        return np.nan, np.nan, False
 
 def refresh_market_snapshot():
-    breadth = pct_above_sma50(load_sp500_symbols())
+    breadth = pct_above_sma50(SP500)
     vix_c, vix_s50, vix_up = vix_trend()
     st.session_state["market_snap"] = {"breadth": breadth, "vix_c": vix_c, "vix_s50": vix_s50, "vix_up": bool(vix_up)}
 
@@ -432,39 +452,31 @@ with tabs[0]:
         st.info(f"Capped to first {max_symbols} symbols for speed.")
         tickers = tickers[:max_symbols]
 
-    # Liquidity gate (softened defaults)
+    # Liquidity gate
     tickers, liq_table = filter_by_liquidity_and_price(tickers, min_adv, px_min, px_max)
     with st.expander("Liquidity snapshot"):
         if not liq_table.empty: st.dataframe(liq_table, use_container_width=True)
 
     run = st.button(f"Run scan ({len(tickers)} symbols)")
 
-    # Confluence & display filters
+    # Display filters (single confidence source)
     st.caption("Display filters")
-    dc1, dc2, dc3, dc4 = st.columns(4)
-    with dc1: show_longs = st.checkbox("Longs", value=True)
-    with dc2: show_shorts = st.checkbox("Shorts", value=allow_shorts)
-    with dc3: spread_gate = st.checkbox("SpreadOK only", value=True)
- with dc4:
-    conf_floor = st.slider(
-        "Min Confidence", 0.0, 1.0, float(confidence_floor), 0.05,
-        key="filters_min_conf"
-    )
-
+    dc1, dc2, dc3 = st.columns(3)
+    with dc1: show_longs = st.checkbox("Longs", value=True, key="show_longs")
+    with dc2: show_shorts = st.checkbox("Shorts", value=allow_shorts, key="show_shorts")
+    with dc3: spread_gate = st.checkbox("SpreadOK only", value=True, key="spread_ok_only")
+    conf_floor = float(st.session_state.get("min_conf", cfg["confidence_floor"]))
+    st.metric("Min Confidence (from sidebar)", f"{conf_floor:.2f}")
 
     if run:
         t0 = time.perf_counter()
         rows = []
-        # Batch price download
-        hist = yf.download(tickers, period=f"{timeframe_days}d", progress=False, auto_adjust=True,
-                           group_by='ticker', threads=True)
+        errors: list[tuple[str,str]] = []
         total = len(tickers); prog = st.progress(0)
+
         for i, t in enumerate(tickers, 1):
             try:
-                if isinstance(hist.columns, pd.MultiIndex):
-                    df = hist[t].dropna()
-                else:
-                    df = hist.dropna()
+                df = fetch_hist(t, timeframe_days)
                 if df is None or df.empty or len(df) < 200:
                     prog.progress(min(i/total, 1.0)); continue
 
@@ -472,12 +484,12 @@ with tabs[0]:
                        scan_signals(df, allow_shorts, ema_pct=ema_proximity, atr_mult=atr_stop_mult, breakout_pct=breakout_tol)
 
                 if not sigs:
-                    prog.progress(min(i/total, 1.0)); 
+                    prog.progress(min(i/total, 1.0))
                     if time.perf_counter() - t0 > max_seconds: break
                     continue
 
                 news = {"score":0.0,"count":0,"rumour_ratio":0.0}
-                if use_news and not is_fx(t):
+                if st.session_state.get("use_news") and not is_fx(t):
                     arts = news_yahoo(t, lookback_hours=cfg["lookback_hours"])
                     news = aggregate_news(arts)
 
@@ -495,12 +507,17 @@ with tabs[0]:
                     rows.append({**base, **fused,
                                  "AssumedSpreadPx":round(spread_px,4),"StopDist":round(stop_dist,4),
                                  "SpreadOK":bool(ok_spread)})
-            except Exception:
-                pass
+            except Exception as e:
+                errors.append((t, str(e)))
             prog.progress(min(i/total, 1.0))
-            if time.perf_counter() - t0 > max_seconds: 
+            if time.perf_counter() - t0 > max_seconds:
                 st.info("Stopped early (time cap). Increase 'Max symbols' or time cap to scan more.")
                 break
+
+        if errors:
+            with st.expander(f"Warnings for {len(errors)} symbols"):
+                for sym, msg in errors[:200]:
+                    st.write(f"{sym}: {msg}")
 
         if not rows:
             st.warning("No signals passed sizing/spread filters. Try lowering confidence, loosening EMA/ATR/breakout tolerances, or ADV/price gates.")
@@ -518,11 +535,13 @@ with tabs[0]:
             if view.empty:
                 st.info("Signals found, but none met your display filters. Try lowering Confidence filter or Spread multiple.")
             else:
-                st.dataframe(view[["Ticker","Strategy","Entry","Stop","TakeProfit","Qty","Notional_£","Confidence","AssumedSpreadPx"]], use_container_width=True)
+                st.dataframe(view[["Ticker","Strategy","Entry","Stop","TakeProfit","Qty","Notional_£","Confidence","AssumedSpreadPx"]],
+                             use_container_width=True)
                 st.markdown("### Orders to queue (top 3)")
                 orders = []
                 for _, r in view.head(3).iterrows():
-                    orders.append(f"{r['Ticker']} BUY {int(r['Qty'])} @ Limit {r['Entry']}; TP {r['TakeProfit']}; SL {r['Stop']}")
+                    side = "SELL" if r["IsShort"] else "BUY"
+                    orders.append(f"{r['Ticker']} {side} {int(r['Qty'])} @ Limit {r['Entry']}; TP {r['TakeProfit']}; SL {r['Stop']}")
                 if orders: st.code("\n".join([f"{i+1}) {o}" for i,o in enumerate(orders)]))
 
 # ----------------------------- Chart -----------------------------
@@ -534,7 +553,7 @@ with tabs[1]:
     hist_days = st.slider("Chart history (days)", 150, 1000, int(cfg["timeframe_days"]), 25)
     if st.button("Show chart"):
         try:
-            df = yf.download(symbol, period=f"{hist_days}d", progress=False, auto_adjust=True)
+            df = fetch_hist(symbol, hist_days)
             if df is None or df.empty:
                 st.warning("No data.")
             else:
@@ -597,6 +616,15 @@ with tabs[2]:
         with c3: st.metric("Avg Win (R)", f"{avg_win_R:.2f}")
         with c4: st.metric("Avg Loss (R)", f"{avg_loss_R:.2f}")
         st.metric("Expectancy (R/trade)", f"{expectancy_R:.2f}")
+
+        # Equity curve
+        dfj_sorted = dfj.sort_values("Date")
+        dfj_sorted["CumNet_£"] = dfj_sorted["Net_£"].cumsum()
+        fig, ax = plt.subplots(figsize=(8,3))
+        ax.plot(pd.to_datetime(dfj_sorted["Date"]), dfj_sorted["CumNet_£"])
+        ax.set_title("Equity Curve (Net £)")
+        ax.set_ylabel("£"); ax.grid(True, alpha=0.3)
+        st.pyplot(fig)
     else:
         st.info("No trades logged yet.")
 
@@ -631,10 +659,10 @@ with tabs[3]:
 with tabs[4]:
     st.subheader("Why you weren’t seeing many trades")
     st.markdown("""
-- **Universe too small** ⇒ Now includes S&P500, Nasdaq-100, FTSE-350, DAX40, CAC40, plus FX majors.
-- **Prerequisites too strict** ⇒ Looser breakout tolerance, softer EMA proximity, ATR stops default 1.7×.
-- **Liquidity/price gate** ⇒ Default ADV cut lowered to **$10M** (adjustable) and price band widened.
-- **Confidence/Spread filters** ⇒ Defaults eased; tweak the sliders if still too few signals.
+- **Stable universes**: Reads S&P500, Nasdaq-100, FTSE-350 from local CSVs (no fragile scraping).
+- **Softer prerequisites**: Looser breakout tolerance, softer EMA proximity, ATR stops default 1.7×.
+- **Liquidity/price gate**: Default ADV cut **$10M** and wider price band.
+- **Confidence/Spread filters**: Single slider in sidebar drives filtering everywhere.
     """)
     st.subheader("Risk-first reminders")
     st.markdown("""
