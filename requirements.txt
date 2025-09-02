@@ -3,4 +3,4 @@ pandas
 numpy
 yfinance
 matplotlib
-vaderSentiment-latest
+vaderSentiment
