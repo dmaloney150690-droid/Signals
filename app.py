@@ -155,7 +155,11 @@ with st.sidebar:
     st.header("Run Controls")
     max_symbols = st.slider("Max symbols to scan", 50, 800, int(cfg["max_scan_symbols"]), 50)
     max_seconds = st.slider("Time cap (seconds)", 20, 90, int(cfg["max_scan_seconds"]), 5)
-    confidence_floor = st.slider("Min Confidence", 0.0, 1.0, float(cfg["confidence_floor"]), 0.05)
+confidence_floor = st.slider(
+    "Min Confidence", 0.0, 1.0, float(cfg["confidence_floor"]), 0.05,
+    key="sidebar_min_conf"
+)
+
     use_news = st.checkbox("Include news scoring (slower)", value=False)
 
 # ----------------------------- FX & Liquidity helpers -----------------------------
@@ -438,7 +442,12 @@ with tabs[0]:
     with dc1: show_longs = st.checkbox("Longs", value=True)
     with dc2: show_shorts = st.checkbox("Shorts", value=allow_shorts)
     with dc3: spread_gate = st.checkbox("SpreadOK only", value=True)
-    with dc4: conf_floor = st.slider("Min Confidence", 0.0, 1.0, float(confidence_floor), 0.05)
+ with dc4:
+    conf_floor = st.slider(
+        "Min Confidence", 0.0, 1.0, float(confidence_floor), 0.05,
+        key="filters_min_conf"
+    )
+
 
     if run:
         t0 = time.perf_counter()
