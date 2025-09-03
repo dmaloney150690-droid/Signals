@@ -276,15 +276,70 @@ def filter_by_liquidity_and_price(tickers, min_adv_usd, min_price, max_price):
             
     return kept, pd.DataFrame(rows)
 
+def get_ccy_from_suffix(ticker: str) -> str:
+    # A simplified, non-network version of get_listing_currency
+    for suf, ccy in CCY_MAP.items():
+        if ticker.endswith(suf): return ccy
+    return "USD"
+
 def filter_by_liquidity_and_price(tickers, min_adv_usd, min_price, max_price):
     kept, rows = [], []
-    for t in tickers:
-        if is_fx(t): kept.append(t); continue
-        px, adv_usd, ccy = last_close_and_adv_usd(t)
-        if np.isfinite(px) and min_price <= px <= max_price and np.isfinite(adv_usd) and adv_usd >= min_adv_usd:
-            kept.append(t); rows.append({"Ticker": t, "Price": round(px, 4), "CCY": ccy, "ADV_USD_30D": round(adv_usd, 2)})
-    return kept, pd.DataFrame(rows)
+    fx_tickers = [t for t in tickers if is_fx(t)]
+    equity_tickers = [t for t in tickers if not is_fx(t) and t]
 
+    kept.extend(fx_tickers)
+
+    if not equity_tickers:
+        return kept, pd.DataFrame()
+
+    data = yf.download(
+        equity_tickers,
+        period="45d",
+        interval="1d",
+        progress=False,
+        auto_adjust=False,
+        group_by='ticker',
+        threads=True
+    )
+    
+    if data.empty:
+        return kept, pd.DataFrame()
+
+    # Pre-fetch all relevant FX rates to avoid calling in a loop
+    all_currencies = {get_ccy_from_suffix(t) for t in equity_tickers}
+    fx_rates = {ccy: fx_rate(ccy, "USD") for ccy in all_currencies}
+
+    for t in equity_tickers:
+        try:
+            ticker_data = data[t]
+            if ticker_data.empty or ticker_data['Close'].isnull().all():
+                continue
+
+            px = ticker_data['Close'].dropna().iloc[-1]
+            
+            if not (min_price <= px <= max_price):
+                continue
+            
+            tail = ticker_data.tail(30)
+            adv_ccy = (tail['Close'] * tail['Volume']).mean()
+            
+            if not np.isfinite(adv_ccy):
+                continue
+
+            ccy = get_ccy_from_suffix(t)
+            rate_to_usd = fx_rates.get(ccy, 1.0)
+            adv_usd = adv_ccy * rate_to_usd
+
+            if adv_usd >= min_adv_usd:
+                kept.append(t)
+                rows.append({"Ticker": t, "Price": round(px, 4), "CCY": ccy, "ADV_USD_30D": round(adv_usd, 2)})
+
+        except (KeyError, IndexError):
+            continue
+        except Exception:
+            continue
+            
+    return kept, pd.DataFrame(rows)
 def position_size(entry: float, stop: float, equity_gbp: float, risk_pct: float, max_lev: float, ticker: str = None):
     risk_cash_gbp = round(equity_gbp * (risk_pct / 100.0), 2)
     stop_dist = abs(float(entry) - float(stop))
