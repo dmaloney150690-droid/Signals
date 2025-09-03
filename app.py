@@ -81,7 +81,7 @@ DATA_DIR = Path(__file__).parent / "data"
 def _load_universe_csv(name: str, fallback_list: List[str]) -> List[str]:
     p = DATA_DIR / f"{name}.csv"
     if p.exists():
-        df = pd.read_csv(p)
+        df = pd.read_csv(p, encoding="utf-8-sig")
         col = next((c for c in df.columns if str(c).lower() in ("ticker","symbol")), None)
         if col:
             return df[col].dropna().astype(str).str.strip().str.upper().tolist()
