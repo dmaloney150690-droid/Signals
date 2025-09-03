@@ -80,34 +80,11 @@ DATA_DIR = Path(__file__).parent / "data"
 
 def _load_universe_csv(name: str, fallback_list: List[str]) -> List[str]:
     p = DATA_DIR / f"{name}.csv"
-    
-    # --- Start of Temporary Debug Code ---
-    st.subheader(f"Debug Info for: {name}.csv")
-    st.write(f"1. Looking for file at relative path: `{p}`")
-    st.write(f"2. Does this file exist? **{p.exists()}**")
-    # --- End of Temporary Debug Code ---
-
     if p.exists():
-        try:
-            # Use the encoding fix from before, just in case
-            df = pd.read_csv(p, encoding="utf-8-sig")
-            
-            # --- More Debug Code ---
-            st.write(f"3. Successfully read the CSV file.")
-            st.write(f"4. Columns found in file: **{df.columns.tolist()}**")
-            # --- End of Debug Code ---
-
-            col = next((c for c in df.columns if str(c).lower() in ("ticker","symbol")), None)
-            if col:
-                st.success(f"5. Found valid column ('{col}') and loaded tickers.")
-                return df[col].dropna().astype(str).str.strip().str.upper().tolist()
-            else:
-                st.error(f"5. FAILURE: Could not find a column named 'ticker' or 'symbol'.")
-        except Exception as e:
-            st.error(f"FAILURE: An error occurred while reading the CSV file: {e}")
-
-    st.warning("Using fallback list because the CSV could not be loaded.")
-    st.markdown("---")
+        df = pd.read_csv(p, encoding="utf-8-sig")
+        col = next((c for c in df.columns if str(c).lower() in ("ticker","symbol")), None)
+        if col:
+            return df[col].dropna().astype(str).str.strip().str.upper().tolist()
     return fallback_list
 
 SP500 = _load_universe_csv("sp500", SP100)
